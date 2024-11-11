@@ -504,6 +504,8 @@ seastar::future<> OSD::start()
   }).then_unpack([this] {
     return _add_me_to_crush();
   }).then([this] {
+    return _add_device_class();
+   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
     monc->sub_want("osdmap", 0, 0);
@@ -606,6 +608,41 @@ seastar::future<> OSD::_send_boot()
   // OSDMap flag
   m->metadata["osd_type"] = "crimson";
   return monc->send_message(std::move(m));
+}
+
+seastar::future<> OSD::_add_device_class()
+{
+  LOG_PREFIX(OSD::_add_device_class);
+  if (!local_conf().get_val<bool>("osd_crush_update_on_start")) {
+    return seastar::now();
+  }
+
+  auto get_device_class = [this]() -> seastar::future<std::string> {
+    return store.get_default_device_class().then([FNAME, this](std::string device_class) {
+      return seastar::make_ready_future<std::string>(device_class);
+    }).handle_exception([FNAME](std::exception_ptr e) {
+      ERROR("Failed to get device class: ", e);
+      return seastar::make_ready_future<std::string>("");
+    });
+  };
+
+  return get_device_class().then([FNAME, this](auto device_class) {
+    INFO("device_class is {} whoami: {}", device_class, whoami);
+    string cmd = string("{\"prefix\": \"osd crush set-device-class\", ") +
+                 string("\"class\": \"") + device_class + string("\", ") +
+                 string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
+
+    return monc->run_command(std::move(cmd), {}).then([FNAME](auto&& command_result) {
+      [[maybe_unused]] auto [code, message, out] = std::move(command_result);
+      if (code) {
+        WARN("fail to set device_class : {} ({})", message, code);
+        throw std::runtime_error("fail to add to crush");
+      } else {
+        INFO("newly added to crush: {}", message);
+      }
+      return seastar::now();
+    });
+  });
 }
 
 seastar::future<> OSD::_add_me_to_crush()

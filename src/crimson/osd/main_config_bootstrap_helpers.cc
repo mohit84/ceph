@@ -131,6 +131,30 @@ _get_early_config(int argc, const char *argv[])
 	  populate_config_from_mon().get();
 	}
 
+        struct OptionValue {
+          std::optional<double> double_value;
+          // Helper methods to check and get the value
+          bool has_value() const {
+            return double_value.has_value();
+          }
+          std::string to_string() const {
+            if (double_value) 
+              return std::to_string(*double_value);
+            return "null";
+          }
+        };
+        // Define a structure to represent each option
+        struct SeastarOption {
+          std::string option_name;                     // Command-line option name
+          std::string config_key;                      // Configuration key
+          std::optional<OptionValue> default_value;    // Optional default value
+        };
+
+        const std::vector<SeastarOption> seastar_options = {
+          {"--task-quota-ms", "crimson_seastar_task_quota_ms",
+          OptionValue{.double_value = std::optional<double>(0.5)}},
+        };
+
 	// get ceph configs
 	std::set_difference(
 	  argv, argv + argc,
@@ -142,6 +166,33 @@ _get_early_config(int argc, const char *argv[])
 	  std::end(ret.early_args),
 	  std::begin(early_args),
 	  std::end(early_args));
+
+        for (const auto& option : seastar_options) {
+          OptionValue option_value;
+          if (option.option_name == "--task-quota-ms") {
+            logger().info("Trying to get task-quota-ms value ");
+            auto value = crimson::common::get_conf<double>("crimson_seastar_task_quota_ms");
+            if (value) {
+              logger().info(" task-quota-ms value is set ");
+              option_value.double_value = value;
+            } else {
+              logger().warn("Skipping task-quota-ms: configuration not found");
+              continue;
+            }
+          }         
+          // Log and process the option
+          if (option_value.has_value()) {
+            logger().info("get_early_config --option_name {} with --option_value {}", 
+                          option.option_name, option_value.to_string());
+
+            ret.early_args.emplace_back(option.option_name);
+            if (option_value.double_value) {
+              ret.early_args.emplace_back(std::to_string(*option_value.double_value));
+            }
+          } else {
+            logger().info("Skipping option {}: no value to process", option.option_name);
+          }
+        }
 
 	if (auto found = std::find_if(
 	      std::begin(early_args),

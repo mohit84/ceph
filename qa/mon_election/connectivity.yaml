@@ -3,3 +3,4 @@ overrides:
     conf:
       global:
         mon election default strategy: 3
+        osd pool default crimson: true

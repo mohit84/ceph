@@ -1,0 +1,16 @@
+meta:
+  desc: |
+    Force CentOS 9 for Crimson suites without touching shared Cephadm files.
+
+overrides:
+  distro:
+    os_type: centos
+    os_version: "9.stream"
+
+  ceph:
+    flavor: crimson-debug
+
+exclude:
+  - 'cephadm/smoke-singlehost/*ubuntu*'
+  - '*/0-distro/ubuntu_*'
+  - 'cephadm/workunits/0-distro/ubuntu_22.04'

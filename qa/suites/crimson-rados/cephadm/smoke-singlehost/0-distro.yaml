@@ -1,0 +1,13 @@
+os_type: centos
+os_version: "9.stream"
+overrides:
+  selinux:
+    allowlist:
+      - scontext=system_u:system_r:logrotate_t:s0
+      - scontext=system_u:system_r:getty_t:s0
+
+tasks:
+- pexec:
+    all:
+      - sudo dnf remove nvme-cli -y || true
+      - sudo dnf install -y nvmetcli nvme-cli

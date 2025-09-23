@@ -181,6 +181,15 @@ public:
     }
 
     void release() {
+      LOG_PREFIX(ObjectContextLoader::release);
+      if (!head_state.is_empty()) {
+        SUBINFODPP(osd,
+                   "MY_LOG Calling release_state for head {}, {}", loader.dpp,
+                   *(head_state.obc), head_state.obc->obs);
+      } else {
+        SUBINFODPP(osd, "MY_LOG head_state is empty", loader.dpp);
+      }
+
       release_state(head_state);
       release_state(target_state);
     }
@@ -298,6 +307,8 @@ public:
     co_await load_and_lock(manager, State);
     co_await std::invoke(
       func, manager.get_head_obc(), manager.get_obc());
+    LOG_PREFIX(ObjectContextLoader::with_obc);
+    SUBINFODPP(osd, "MY_LOG lambda completed for oid {}", dpp, oid);
   }
 
   // Use this variant in the case where the head object

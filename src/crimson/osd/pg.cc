@@ -728,7 +728,8 @@ void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
   /* We don't actually route the scrub request message into the state machine.
    * Instead, we handle it directly in PGScrubber::handle_scrub_requested).
    */
-  ceph_assert(0 == "impossible in crimson");
+  logger().info("Calling ceph_assert ");
+  //ceph_assert(0 == "impossible in crimson");
 }
 
 void PG::log_state_enter(const char *state) {

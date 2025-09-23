@@ -147,10 +147,13 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
       msg->map_epoch = pg.get_osdmap_epoch();
       msg->min_epoch = pg.get_last_peering_reset();
       msg->set_pulls({std::move(pull_op)});
-      return shard_services.send_to_osd(
+      auto f = shard_services.send_to_osd(
         pull_info.from.osd,
         std::move(msg),
         pg.get_osdmap_epoch());
+      LOG_PREFIX(ReplicatedRecoveryBackend::maybe_pull_missing_obj::send_to_osd);
+      INFODPP("MY_LOG Before return a send_to_osd future {}", pg, soid);
+      return f;
     }).si_then([this, soid]() -> prepare_pull_iertr::future<> {
       auto& recovery_waiter = get_recovering(soid);
       return recovery_waiter.wait_for_pull();
@@ -825,9 +828,9 @@ ReplicatedRecoveryBackend::_handle_pull_response(
   PullOp* response)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::handle_pull);
-  DEBUGDPP("{} {} data.size() is {} data_included: {}",
+  DEBUGDPP("MY_LOG {} {} data.size() is {} data_included: {} oid {}",
 	   pg, push_op.recovery_info, push_op.after_progress,
-	   push_op.data.length(), push_op.data_included);
+	   push_op.data.length(), push_op.data_included, push_op.soid);
   ceph::os::Transaction t;
 
   const hobject_t &hoid = push_op.soid;
@@ -899,12 +902,13 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     pull_info.stat.num_objects_recovered++;
     auto manager = pg.obc_loader.get_obc_manager(
       recovery_waiter.obc);
+    INFODPP("Trying to get exclusive lock {}", pg, recovery_waiter.obc->obs.oi.soid);
     manager.lock_excl_sync(); /* cannot already be locked */
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.soid, get_recovering(push_op.soid).pull_info->recovery_info,
       false, t
     );
-    DEBUGDPP("submitting transaction, complete", pg);
+    INFODPP("submitting transaction, complete", pg);
     co_await interruptor::make_interruptible(
       shard_services.get_store().do_transaction(coll, std::move(t)));
   } else {

@@ -13,6 +13,7 @@ tasks:
         time: 60
         write_only: false
         readmode: 'rand'
+        # dummy_note: this is a no-op change for testing only
     cluster:
       user: 'ubuntu'
       osds_per_node: 3
@@ -22,6 +23,7 @@ tasks:
           pg_size: 256
           pgp_size: 256
           replication: 'replicated'
+          dummy_key: 'no_effect'   # harmless extra key
     monitoring_profiles:
       perf:
         nodes:

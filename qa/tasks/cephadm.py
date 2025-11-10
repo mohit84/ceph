@@ -784,6 +784,19 @@ def ceph_bootstrap(ctx, config):
                     '*', '--mode', '0755'],
                    check_status=False)
 
+        log.info('Set crimson_cpu_num ....')
+        _shell(ctx, cluster_name, bootstrap_remote, [
+                'ceph', 'config', 'set', 'osd', 'crimson_cpu_num', '4'
+        ])
+        log.info('Set enable_experimental feature to crimson ...')
+        _shell(ctx, cluster_name, bootstrap_remote, [
+                'ceph', 'config', 'set', 'global', 'enable_experimental_unrecoverable_data_corrupting_features', 'crimson'
+        ])
+        log.info('Set set-allow-crimson --yes-i-really-mean-it ...')
+        _shell(ctx, cluster_name, bootstrap_remote, [
+                'ceph', 'osd', 'set-allow-crimson', '--yes-i-really-mean-it'
+        ])
+
         # add other hosts
         for remote, roles in _cephadm_remotes(ctx, log_excluded=True):
             if remote == bootstrap_remote:

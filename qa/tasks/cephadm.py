@@ -27,6 +27,7 @@ from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
 from tasks.util import chacra
 from tasks import template
+from tasks.ceph import check_enable_crimson
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -736,6 +737,7 @@ def ceph_bootstrap(ctx, config):
             cmd += ['--single-host-defaults']
         if not config.get('avoid_pacific_features', False):
             cmd += ['--skip-admin-label']
+
         # bootstrap makes the keyring root 0600, so +r it for our purposes
         cmd += [
             run.Raw('&&'),
@@ -783,6 +785,26 @@ def ceph_bootstrap(ctx, config):
                    ['ceph', 'orch', 'client-keyring', 'set', 'client.admin',
                     '*', '--mode', '0755'],
                    check_status=False)
+
+        flavor = config.get('flavor', 'default')
+        if flavor in ("crimson-debug", "crimson-release"):
+            log.info('Set crimson_cpu_num ....')
+            _shell(ctx, cluster_name, bootstrap_remote, [
+                   'ceph', 'config', 'set', 'osd', 'crimson_cpu_num', '4'])
+            log.info('Set pool_default to crimson ...')
+            _shell(ctx, cluster_name, bootstrap_remote, [
+                'ceph', 'config', 'set', 'mon', 'osd_pool_default_crimson', 'true'])
+            log.info('Set enable_experimental feature to crimson ...')
+            _shell(ctx, cluster_name, bootstrap_remote, [
+                   'ceph', 'config', 'set', 'global',
+                   'enable_experimental_unrecoverable_data_corrupting_features', 'crimson'])
+            log.info('Set set-allow-crimson --yes-i-really-mean-it ...')
+            _shell(ctx, cluster_name, bootstrap_remote, [
+                   'ceph', 'osd', 'set-allow-crimson', '--yes-i-really-mean-it'])
+            log.info('set agent off')
+            _shell(ctx, cluster_name, bootstrap_remote, [
+                'ceph', 'config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'false'])
+
 
         # add other hosts
         for remote, roles in _cephadm_remotes(ctx, log_excluded=True):

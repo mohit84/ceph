@@ -1,7 +1,9 @@
 # no need to verify os + flavor + sha1
 verify_ceph_hash: false
 tasks:
+- install:  
 - cephadm:
+    roleless: true
     conf:
       mgr:
         debug ms: 1

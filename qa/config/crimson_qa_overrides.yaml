@@ -10,6 +10,8 @@ overrides:
       osd:
         crimson osd obc lru size: 10
         debug ms: 20
+        debug osd: 20
+        dummy_key: 'no_effect'   # harmless extra key
         seastore cachepin size pershard: 64M
         seastore max concurrent transactions: 8
     crimson_compat: true

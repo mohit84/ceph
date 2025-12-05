@@ -144,6 +144,7 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     DEBUG("pg {} mapping erased (primary)", pgid);
     return primary_mapping.container().invoke_on_others(
       [pgid, FNAME](auto &other_mapping) {
+      DEBUG("pg {} trying to erased mapping (on others)", pgid);
       auto find_iter = other_mapping.pg_to_core.find(pgid);
       if (find_iter == other_mapping.pg_to_core.end()) {
         ERROR("trying to remove non-exist mapping for pg {} (others)", pgid);

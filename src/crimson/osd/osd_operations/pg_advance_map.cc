@@ -81,6 +81,7 @@ seastar::future<> PGAdvanceMap::start()
      * See: https://tracker.ceph.com/issues/61744
      */
     from = pg->get_osdmap_epoch();
+    DEBUG("{}: start after get osdmap_epoch", *this);
     if (do_init) {
       pg->handle_initialize(rctx);
       pg->handle_activate_map(rctx);

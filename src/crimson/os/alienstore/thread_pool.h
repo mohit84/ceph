@@ -15,11 +15,13 @@
 #include <seastar/core/resource.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/alien.hh>
 
 // std::counting_semaphore is buggy in libstdc++-11
 // (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104928),
 // so we switch back to the homebrew version for now.
 #include "semaphore.h"
+#include "crimson/common/log.h"
 
 namespace crimson::os {
 
@@ -37,35 +39,47 @@ struct Task final : WorkItem {
                        seastar::internal::future_stored_type_t<T>>;
   using futurator_t = seastar::futurize<T>;
 public:
-  explicit Task(Func&& f)
+  explicit Task(Func&& f, seastar::alien::instance& alien, unsigned shard_id)
     : func(std::move(f))
+    , alien(alien)
+    , shard_id(shard_id)
   {}
+
   void process() override {
     try {
       if constexpr (std::is_void_v<T>) {
         func();
-        state.set();
+	std::ignore = seastar::alien::submit_to(
+                    alien, shard_id, [this] {
+                        promise.set_value();     // ← void case
+                        return seastar::make_ready_future<>();
+                    });
       } else {
-        state.set(func());
+	auto result = func();
+	std::ignore = seastar::alien::submit_to(
+                    alien, shard_id, [this, result=std::move(result)]
+                    () mutable {
+                        promise.set_value(std::move(result)); // ← pass result!
+                        return seastar::make_ready_future<>();
+                    });
       }
     } catch (...) {
-      state.set_exception(std::current_exception());
+      auto ex = std::current_exception();
+      std::ignore = seastar::alien::submit_to(
+                alien, shard_id, [this, ex] {
+                    promise.set_exception(ex);
+                    return seastar::make_ready_future<>();
+                });
     }
-    on_done.write_side().signal(1);
   }
   typename futurator_t::type get_future() {
-    return on_done.wait().then([this](size_t) {
-      if (state.failed()) {
-        return futurator_t::make_exception_future(state.get_exception());
-      } else {
-        return futurator_t::from_tuple(state.get_value());
-      }
-    });
+    return promise.get_future();
   }
 private:
   Func func;
-  seastar::future_state<future_stored_type_t> state;
-  seastar::readable_eventfd on_done;
+  seastar::promise<T> promise;
+  seastar::alien::instance& alien;
+  unsigned shard_id;
 };
 
 struct SubmitQueue {
@@ -130,20 +144,33 @@ public:
   size_t size() {
     return n_threads;
   }
+
+  static seastar::logger& thpool_logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+
   template<typename Func, typename...Args>
   auto submit(int shard, Func&& func, Args&&... args) {
+    thpool_logger().debug("submit start shard {}", shard);
+    auto origin_shard = seastar::this_shard_id();
     auto packaged = [func=std::move(func),
                      args=std::forward_as_tuple(args...)] {
       return std::apply(std::move(func), std::move(args));
     };
     return seastar::with_gate(submit_queue.local().pending_tasks,
-      [packaged=std::move(packaged), shard, this] {
+      [packaged=std::move(packaged), shard, origin_shard, this] {
+        thpool_logger().debug("Entered gate shard {}", shard);
         return local_free_slots().wait()
-          .then([packaged=std::move(packaged), shard, this] {
-            auto task = new Task{std::move(packaged)};
+          .then([packaged=std::move(packaged), shard, origin_shard, this] {
+            thpool_logger().debug("got free slot shard {}", shard);
+            auto task = new Task{std::move(packaged),
+                                 seastar::engine().alien(),
+                                 origin_shard
+                                };
             auto fut = task->get_future();
             pending_queues[shard].push_back(task);
             return fut.finally([task, this] {
+              thpool_logger().debug("task done");
               local_free_slots().signal();
               delete task;
             });

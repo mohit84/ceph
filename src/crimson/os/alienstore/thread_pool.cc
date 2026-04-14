@@ -73,7 +73,9 @@ void ThreadPool::loop(std::chrono::milliseconds queue_max_wait, size_t shard)
     WorkItem* work_item = nullptr;
     work_item = pending.pop_front(queue_max_wait);
     if (work_item) {
+      thpool_logger().debug("loop: shard={} processing item", shard);
       work_item->process();
+      thpool_logger().debug("loop: shard={} item done", shard);
     } else if (is_stopping()) {
       break;
     }

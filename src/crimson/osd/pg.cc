@@ -356,6 +356,15 @@ bool PG::should_send_op(pg_shard_t peer, const hobject_t &hoid)
     hoid <= peering_state.get_peer_info(peer).last_backfill ||
     (recovery_handler->backfill_state &&
       hoid <= recovery_handler->backfill_state->get_last_backfill_started());
+
+  logger().debug("{} peer={} hoid={} peer_last_backfill={} last_backfill_started={} should_send={}",
+           *this, peer, hoid,
+           peering_state.get_peer_info(peer).last_backfill,
+           recovery_handler->backfill_state ?
+               recovery_handler->backfill_state->get_last_backfill_started() :
+               hobject_t(),
+           should_send);
+
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{}: {} shipping empty opt to osd.{}, object {}"
@@ -736,6 +745,8 @@ PG::interruptible_future<bool> PG::do_recover_missing(
       "reqid {}, {} is degraded or backfilling",
       *this, reqid, soid);
     if (missing_loc.needs_recovery(soid, &ver)) {
+      needs_recovery_or_backfill = true;
+    } else if(recovery_backend->is_recovering(soid)) {
       needs_recovery_or_backfill = true;
     }
   }
@@ -1373,6 +1384,9 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
   decode(log_entries, p);
   update_stats(req->pg_stats);
 
+  DEBUGDPP("{} txn_empty_before_snap_map={}",
+           *this, *req,
+           txn.empty());
   co_await update_snap_map(
     log_entries,
     txn);

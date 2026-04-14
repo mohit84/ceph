@@ -470,14 +470,19 @@ seastar::future<> AlienStore::do_transaction_no_callbacks(
 	AlienCollection* alien_coll = static_cast<AlienCollection*>(ch.get());
         // moving the `ch` is crucial for buildability on newer S* versions.
 	return alien_coll->with_lock([this, ch=std::move(ch), id, &txn, &done] {
+          logger().debug("{}: got collection_lock pgid={}", __func__, ch->get_cid());
 	  assert(tp);
 	  return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
 	    [this, ch, id, &txn, &done, &alien=seastar::engine().alien()] {
+            logger().debug("{}: submitted to thread pool shard={} thread_shard={} pgid={}",
+                           __func__, ch->get_cid().hash_to_shard(tp->size()),
+                           seastar::this_shard_id(), ch->get_cid());
 	    txn.register_on_commit(new OnCommit(id, done, alien, txn));
 	    auto c = static_cast<AlienCollection*>(ch.get());
 	    return store->queue_transaction(c->collection, std::move(txn));
 	  });
-	}).then([&done] (int r) {
+	}).then([&done, ch] (int r) {
+          logger().debug("{}: transaction_queued pgid={} r={}", __func__, ch->get_cid(), r);
 	  assert(r == 0);
 	  return done.get_future();
 	});

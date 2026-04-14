@@ -21,7 +21,7 @@ overrides:
 tasks:
 - thrashosds:
     timeout: 2400
-    dump_ops_enable: false
+    dump_ops_enable: true
     sighup_delay: 0
     min_in: 2
     noscrub_toggle_delay: 0

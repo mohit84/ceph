@@ -58,6 +58,7 @@ void OSDMapGate<OSDMapGateTypeV>::got_map(epoch_t epoch) {
     return;
   }
   ceph_assert(epoch > current);
+  logger().info("osdmap::got_map {}", epoch);
   current = epoch;
   auto first = waiting_peering.begin();
   auto last = waiting_peering.upper_bound(epoch);

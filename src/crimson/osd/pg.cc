@@ -355,7 +355,8 @@ bool PG::should_send_op(pg_shard_t peer, const hobject_t &hoid)
     hoid.pool != (int64_t)get_pgid().pool() ||
     hoid <= peering_state.get_peer_info(peer).last_backfill ||
     (recovery_handler->backfill_state &&
-      hoid <= recovery_handler->backfill_state->get_last_backfill_started());
+      hoid <= recovery_handler->backfill_state->get_last_backfill_started() &&
+      !is_missing_on_peer(peer, hoid));
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     logger().debug("{}: {} shipping empty opt to osd.{}, object {}"
